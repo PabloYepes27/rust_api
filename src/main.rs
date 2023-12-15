@@ -1,7 +1,8 @@
 use axum::{
     body::Body,
     extract::{Path, Query, Json, Extension},
-    http::StatusCode,
+    http::{StatusCode, Request},
+    middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{get, post, delete},
     Router,
@@ -106,6 +107,11 @@ async fn get_users(Extension(pool): Extension<MySqlPool>) -> impl IntoResponse {
     (axum::http::StatusCode::OK, Json(users)).into_response()
 }
 
+async fn logging_middleware(req: Request<Body>, next: Next<Body>) -> Response {
+    println!("Received a request to {}", req.uri());
+    next.run(req).await
+}
+
 #[tokio::main]
 async fn main() {
     // Load environment variables from the .env file
@@ -126,7 +132,8 @@ async fn main() {
         .route("/add-item", post(add_item))
         .route("/delete-user/:user_id", delete(delete_user))
         .route("/users", get(get_users))
-        .layer(Extension(pool));
+        .layer(Extension(pool))
+        .layer(middleware::from_fn(logging_middleware));
 
     println!("Running on http://localhost:3000");
     // Start Server
