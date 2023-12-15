@@ -3,7 +3,7 @@ use axum::{
     extract::{Path, Query, Json},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{get, post, delete},
     Router,
 };
 
@@ -62,6 +62,32 @@ async fn add_item(Json(item): Json<Item>) -> String {
     format!("Added item: {}", item.title)
 }
 
+// Define a handler that performs an operation and may return an error
+async fn delete_user(Path(user_id): Path<u64>) -> Result<Json<User>, impl IntoResponse> {
+    match perform_delete_user(user_id).await {
+        Ok(_) => Ok(Json(User {
+            id: user_id,
+            name: "Deleted User".into(),
+            email: "some email".to_string(),
+        })),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to delete user: {}", e),
+        )),
+    }
+}
+
+// Hypothetical async function to delete a user by ID
+async fn perform_delete_user(user_id: u64) -> Result<(), String> {
+    // Simulate an error for demonstration
+    if user_id == 1 {
+        Err("User cannot be deleted.".to_string())
+    } else {
+        // Logic to delete a user...
+        Ok(())
+    }
+}
+
 #[tokio::main]
 async fn main() {
     // Define Routes
@@ -70,6 +96,7 @@ async fn main() {
         .route("/create-user", post(create_user))
         .route("/item/:id", get(show_item))
         .route("/add-item", post(add_item))
+        .route("/delete-user/:user_id", delete(delete_user))
         .route("/users", get(list_users));
 
     println!("Running on http://localhost:3000");
