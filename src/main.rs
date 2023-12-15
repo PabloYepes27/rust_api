@@ -1,10 +1,10 @@
 use axum::{
     body::Body,
-    extract::{Path, Query},
+    extract::{Path, Query, Json},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
-    Json, Router,
+    Router,
 };
 
 use serde::{Serialize, Deserialize};
@@ -20,6 +20,12 @@ struct User {
     id: u64,
     name: String,
     email: String,
+}
+
+// A struct for the JSON body
+#[derive(Deserialize)]
+struct Item {
+    title: String,
 }
 
 // Handler for /create-user
@@ -51,6 +57,11 @@ async fn show_item(Path(id): Path<u32>, Query(page): Query<Page>) -> String {
     format!("Item {} on page {}", id, page.number)
 }
 
+// A handler to demonstrate the JSON body extractor
+async fn add_item(Json(item): Json<Item>) -> String {
+    format!("Added item: {}", item.title)
+}
+
 #[tokio::main]
 async fn main() {
     // Define Routes
@@ -58,6 +69,7 @@ async fn main() {
         .route("/", get(|| async { "Hello, Rust!" }))
         .route("/create-user", post(create_user))
         .route("/item/:id", get(show_item))
+        .route("/add-item", post(add_item))
         .route("/users", get(list_users));
 
     println!("Running on http://localhost:3000");
