@@ -1,12 +1,16 @@
 use axum::{
     body::Body,
-    extract::{Path, Query, Json},
+    extract::{Path, Query, Json, Extension},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post, delete},
     Router,
+    Server
 };
 
+use dotenv::dotenv;
+use serde_json::json;
+use sqlx::{MySqlPool, Row};
 use serde::{Serialize, Deserialize};
 
 // A struct for query parameters
@@ -34,22 +38,6 @@ async fn create_user() -> impl IntoResponse {
         .status(StatusCode::CREATED)
         .body(Body::from("User created successfully"))
         .unwrap()
-}
-// Handler for /users
-async fn list_users() -> Json<Vec<User>> {
-    let users = vec![
-        User {
-            id: 1,
-            name: "Elijah".to_string(),
-            email: "elijah@example.com".to_string(),
-        },
-        User {
-            id: 2,
-            name: "John".to_string(),
-            email: "john@doe.com".to_string(),
-        },
-    ];
-    Json(users)
 }
 
 // A handler to demonstrate path and query extractors
@@ -88,8 +76,48 @@ async fn perform_delete_user(user_id: u64) -> Result<(), String> {
     }
 }
 
+// Define the get_users function as before
+async fn get_users(Extension(pool): Extension<MySqlPool>) -> impl IntoResponse {
+    let rows = match sqlx::query("SELECT id, name, email FROM users")
+        .fetch_all(&pool)
+        .await
+    {
+        Ok(rows) => rows,
+        Err(_) => {
+            return (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Internal server error",
+            )
+                .into_response()
+        }
+    };
+
+    let users: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|row| {
+            json!({
+                "id": row.try_get::<i32, _>("id").unwrap_or_default(),
+                "name": row.try_get::<String, _>("name").unwrap_or_default(),
+                "email": row.try_get::<String, _>("email").unwrap_or_default(),
+            })
+        })
+        .collect();
+
+    (axum::http::StatusCode::OK, Json(users)).into_response()
+}
+
 #[tokio::main]
 async fn main() {
+    // Load environment variables from the .env file
+    dotenv().ok();
+
+    // Retrieve the DATABASE_URL environment variable
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL environment variable not set");
+    let pool = MySqlPool::connect(&database_url)
+        .await
+        .expect("Could not connect to the database");
+
     // Define Routes
     let app = Router::new()
         .route("/", get(|| async { "Hello, Rust!" }))
@@ -97,11 +125,12 @@ async fn main() {
         .route("/item/:id", get(show_item))
         .route("/add-item", post(add_item))
         .route("/delete-user/:user_id", delete(delete_user))
-        .route("/users", get(list_users));
+        .route("/users", get(get_users))
+        .layer(Extension(pool));
 
     println!("Running on http://localhost:3000");
     // Start Server
-    axum::Server::bind(&"127.0.0.1:3000".parse().unwrap())
+    Server::bind(&"127.0.0.1:3000".parse().unwrap())
         .serve(app.into_make_service())
         .await
         .unwrap();
